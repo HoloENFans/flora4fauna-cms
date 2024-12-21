@@ -23,60 +23,25 @@ func main() {
 	// ---------------------------------------------------------------
 
 	var hooksDir string
-	app.RootCmd.PersistentFlags().StringVar(
-		&hooksDir,
-		"hooksDir",
-		"",
-		"the directory with the JS app hooks",
-	)
+	app.RootCmd.PersistentFlags().StringVar(&hooksDir, "hooksDir", "./pb_hooks", "the directory with the JS app hooks")
 
 	var hooksWatch bool
-	app.RootCmd.PersistentFlags().BoolVar(
-		&hooksWatch,
-		"hooksWatch",
-		true,
-		"auto restart the app on pb_hooks file change",
-	)
+	app.RootCmd.PersistentFlags().BoolVar(&hooksWatch, "hooksWatch", true, "auto restart the app on pb_hooks file change")
 
 	var hooksPool int
-	app.RootCmd.PersistentFlags().IntVar(
-		&hooksPool,
-		"hooksPool",
-		15,
-		"the total prewarm goja.Runtime instances for the JS app hooks execution",
-	)
+	app.RootCmd.PersistentFlags().IntVar(&hooksPool, "hooksPool", 15, "the total prewarm goja.Runtime instances for the JS app hooks execution")
 
 	var migrationsDir string
-	app.RootCmd.PersistentFlags().StringVar(
-		&migrationsDir,
-		"migrationsDir",
-		"",
-		"the directory with the user defined migrations",
-	)
+	app.RootCmd.PersistentFlags().StringVar(&migrationsDir, "migrationsDir", "./pb_migrations", "the directory with the user defined migrations")
 
 	var automigrate bool
-	app.RootCmd.PersistentFlags().BoolVar(
-		&automigrate,
-		"automigrate",
-		true,
-		"enable/disable auto migrations",
-	)
+	app.RootCmd.PersistentFlags().BoolVar(&automigrate, "automigrate", true, "enable/disable auto migrations")
 
 	var publicDir string
-	app.RootCmd.PersistentFlags().StringVar(
-		&publicDir,
-		"publicDir",
-		defaultPublicDir(),
-		"the directory to serve static files",
-	)
+	app.RootCmd.PersistentFlags().StringVar(&publicDir, "publicDir", defaultPublicDir(), "the directory to serve static files")
 
 	var indexFallback bool
-	app.RootCmd.PersistentFlags().BoolVar(
-		&indexFallback,
-		"indexFallback",
-		true,
-		"fallback the request to index.html on missing static path (eg. when pretty urls are used with SPA)",
-	)
+	app.RootCmd.PersistentFlags().BoolVar(&indexFallback, "indexFallback", true, "fallback the request to index.html on missing static path (eg. when pretty urls are used with SPA)")
 
 	app.RootCmd.ParseFlags(os.Args[1:])
 
@@ -114,24 +79,31 @@ func main() {
 
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
 		se.Router.POST("/api/mmd-hook", func(e *core.RequestEvent) error {
-			// TODO: Validate signature
-			return e.BadRequestError("Not implemented", nil)
+			MmdHookSecret, ok := os.LookupEnv("MMD_HOOK_SECRET")
+			if !ok {
+				return e.InternalServerError("MMD_HOOK_SECRET not set", nil)
+			}
+
+			if e.Request.Header.Get("MMD-Signature") != MmdHookSecret {
+				return e.BadRequestError("Invalid signature", nil)
+			}
 
 			info, err := e.RequestInfo()
 			if err != nil {
 				return e.BadRequestError("Failed to parse request", err)
 			}
+
 			eventType, ok := info.Body["eventType"].(string)
 			if !ok {
 				return e.BadRequestError("Failed to parse request body", err)
 			}
 
 			if eventType != "donation_completed" {
-				return e.String(http.StatusOK, "ok")
+				return e.NoContent(http.StatusOK)
 			}
 
 			data := struct {
-				Id        int64  `json:"id"`
+				Id        string `json:"id"`
 				EventType string `json:"eventType"`
 				LiveMode  bool   `json:"liveMode"`
 				Data      struct {
@@ -162,14 +134,14 @@ func main() {
 			record := core.NewRecord(collection)
 			record.Set("username", data.Data.Donation.Dedication)
 			record.Set("message", data.Data.Donation.Message)
-			record.Set("amount", data.Data.Donation.Amount)
+			record.Set("amount", (data.Data.Donation.Amount+data.Data.Donation.TipAmount)/100)
 			record.Set("status", "pending_review")
 			err = app.Save(record)
 			if err != nil {
 				return e.InternalServerError("Failed to save record", err)
 			}
 
-			return e.String(http.StatusOK, "ok")
+			return e.NoContent(http.StatusOK)
 		})
 
 		return se.Next()
