@@ -115,6 +115,7 @@ func main() {
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
 		se.Router.POST("/api/mmd-hook", func(e *core.RequestEvent) error {
 			// TODO: Validate signature
+			return e.BadRequestError("Not implemented", nil)
 
 			info, err := e.RequestInfo()
 			if err != nil {
@@ -153,7 +154,20 @@ func main() {
 				return e.BadRequestError("Failed to read request data", err)
 			}
 
-			// TODO: Insert into collection
+			collection, err := app.FindCollectionByNameOrId("donations")
+			if err != nil {
+				return e.InternalServerError("Failed to find collection", err)
+			}
+
+			record := core.NewRecord(collection)
+			record.Set("username", data.Data.Donation.Dedication)
+			record.Set("message", data.Data.Donation.Message)
+			record.Set("amount", data.Data.Donation.Amount)
+			record.Set("status", "pending_review")
+			err = app.Save(record)
+			if err != nil {
+				return e.InternalServerError("Failed to save record", err)
+			}
 
 			return e.String(http.StatusOK, "ok")
 		})
