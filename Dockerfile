@@ -11,7 +11,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o pocketbase .
 
 FROM alpine:latest
 
-RUN mkdir /pb
+WORKDIR /pb
 
 COPY --from=build /build/pocketbase /pb/pocketbase
 COPY pb_migrations /pb/pb_migrations
