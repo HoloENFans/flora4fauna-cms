@@ -20,4 +20,4 @@ RUN apk update && apk add ca-certificates && rm -rf /var/cache/apk/*
 
 EXPOSE 8090
 
-ENTRYPOINT ["/pb/pocketbase", "serve", "--http=0.0.0.0:8090", "--dir=/pb_data", "--publicDir=/pb_public"]
+ENTRYPOINT ["/pb/pocketbase", "serve", "--http=0.0.0.0:8090"]
